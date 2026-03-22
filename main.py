@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 # --- Configuração da Página ---
 st.set_page_config(layout="wide", page_title="Enganando a IA: Ataque Adversário")
 
-st.title("🐾 Projeto Pessoal: Enganando Modelos de Classificação de Animais")
+st.title("🐾 Enganando Modelos de Classificação de Animais")
 st.markdown("""
 Esta aplicação demonstra como pequenas mudanças imperceptíveis em uma imagem (Ataque Adversário)
 podem fazer um modelo de Deep Learning de última geração (ResNet50) classificar um animal de forma totalmente errada.
@@ -41,6 +41,41 @@ def load_labels():
 model = load_model()
 labels = load_labels()
 
+# Classes mais conhecidas para simplificar a escolha do alvo na interface.
+COMMON_TARGET_LABEL_CANDIDATES = [
+    "tabby",
+    "tiger_cat",
+    "Persian_cat",
+    "Siamese_cat",
+    "Egyptian_cat",
+    "Chihuahua",
+    "pug",
+    "beagle",
+    "golden_retriever",
+    "Labrador_retriever",
+    "German_shepherd",
+    "Siberian_husky",
+    "red_fox",
+    "timber_wolf",
+    "lion",
+    "tiger",
+    "leopard",
+    "cheetah",
+    "brown_bear",
+    "polar_bear",
+    "giant_panda",
+    "zebra",
+    "giraffe",
+    "African_elephant",
+    "hippopotamus",
+    "koala",
+    "kangaroo",
+    "gorilla",
+    "chimpanzee",
+    "orangutan",
+    "meerkat",
+]
+
 # --- Transformações de Imagem ---
 # Mantemos a proporção da imagem para evitar cortes quadrados na saída.
 preprocess = transforms.Compose([
@@ -65,6 +100,27 @@ def prepare_image_for_model(image, max_side=512):
         prepared_image.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
 
     return prepared_image
+
+def format_label_name(label):
+    """Deixa o nome da classe mais legível para a interface."""
+    return label.replace("_", " ")
+
+def get_popular_target_labels(labels):
+    """Filtra um subconjunto de classes populares e usa fallback se necessário."""
+    available_labels = []
+    seen_labels = set()
+
+    for candidate in COMMON_TARGET_LABEL_CANDIDATES:
+        for idx, label in labels.items():
+            if label == candidate and label not in seen_labels:
+                available_labels.append((idx, label))
+                seen_labels.add(label)
+                break
+
+    if available_labels:
+        return available_labels
+
+    return sorted(labels.items(), key=lambda x: x[1])
 
 def iterative_fgsm_targeted(image, epsilon, target_class_idx, model, iters=20):
     """
@@ -136,11 +192,23 @@ uploaded_file = st.sidebar.file_uploader("Escolha uma imagem de animal...", type
 st.sidebar.markdown("---")
 st.sidebar.header("2. Configuração do Ataque")
 
-# Seleção da classe alvo (ordenada alfabeticamente para facilitar)
-sorted_labels = sorted(labels.items(), key=lambda x: x[1])
-label_display_names = [v for k, v in sorted_labels]
-target_label_name = st.sidebar.selectbox("Escolha a classe alvo ('falsa'):", label_display_names, index=22) # Index 22 é 'bald_eagle' como exemplo
-target_class_idx = [k for k, v in labels.items() if v == target_label_name][0]
+# Seleção da classe alvo com foco em classes mais conhecidas
+popular_target_labels = get_popular_target_labels(labels)
+label_display_names = [format_label_name(label) for _, label in popular_target_labels]
+
+default_target_label = "golden_retriever"
+default_index = next(
+    (i for i, (_, label) in enumerate(popular_target_labels) if label == default_target_label),
+    0,
+)
+
+target_label_display = st.sidebar.selectbox(
+    "Escolha a classe alvo ('falsa'):",
+    label_display_names,
+    index=default_index,
+    help="A lista foi filtrada para mostrar apenas classes mais conhecidas.",
+)
+target_class_idx, target_label_name = popular_target_labels[label_display_names.index(target_label_display)]
 
 # Slider de Epsilon (intensidade da mudança)
 # Valores comuns para FGSM na ImageNet: 0.007 (1/255), 0.02, 0.03
